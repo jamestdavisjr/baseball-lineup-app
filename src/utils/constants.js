@@ -16,4 +16,5 @@ export const POSITION_LABELS = {
 };
 
 export const INNINGS_PER_GAME = 6;
-export const PLAYERS_PER_TEAM = 10;
+export const FIELD_SPOTS = 10; // positions on the field per inning
+export const MIN_PLAYERS = 10; // minimum roster size

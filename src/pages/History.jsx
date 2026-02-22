@@ -38,87 +38,104 @@ export default function History({ players, lineups, deleteLineup }) {
       <p className="subtitle">{lineups.length} game(s) saved</p>
 
       <div className="history-list">
-        {[...lineups].reverse().map((lineup) => (
-          <div key={lineup.id} className="history-card">
-            <div
-              className="history-header"
-              onClick={() =>
-                setExpandedId(expandedId === lineup.id ? null : lineup.id)
-              }
-            >
-              <div>
-                <strong>Game #{lineup.gameNumber}</strong>
-                <span className="history-date">
-                  {new Date(lineup.date).toLocaleDateString()}
+        {[...lineups].reverse().map((lineup) => {
+          const hasBench = lineup.bench && lineup.bench.some((b) => b.length > 0);
+
+          return (
+            <div key={lineup.id} className="history-card">
+              <div
+                className="history-header"
+                onClick={() =>
+                  setExpandedId(expandedId === lineup.id ? null : lineup.id)
+                }
+              >
+                <div>
+                  <strong>Game #{lineup.gameNumber}</strong>
+                  <span className="history-date">
+                    {new Date(lineup.date).toLocaleDateString()}
+                  </span>
+                  {hasBench && <span className="history-badge">{lineup.battingOrder.length}P</span>}
+                </div>
+                <span className="expand-icon">
+                  {expandedId === lineup.id ? '▲' : '▼'}
                 </span>
               </div>
-              <span className="expand-icon">
-                {expandedId === lineup.id ? '▲' : '▼'}
-              </span>
-            </div>
 
-            {expandedId === lineup.id && (
-              <div className="history-detail">
-                <div className="history-actions">
-                  <button
-                    className="btn-secondary btn-small"
-                    onClick={() => handlePrint(lineup)}
-                  >
-                    Print
-                  </button>
-                  <button
-                    className="btn-danger-outline btn-small"
-                    onClick={() => {
-                      if (confirm('Delete this lineup?')) {
-                        deleteLineup(lineup.id);
-                        setExpandedId(null);
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
+              {expandedId === lineup.id && (
+                <div className="history-detail">
+                  <div className="history-actions">
+                    <button
+                      className="btn-secondary btn-small"
+                      onClick={() => handlePrint(lineup)}
+                    >
+                      Print
+                    </button>
+                    <button
+                      className="btn-danger-outline btn-small"
+                      onClick={() => {
+                        if (confirm('Delete this lineup?')) {
+                          deleteLineup(lineup.id);
+                          setExpandedId(null);
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
 
-                <h4>Batting Order</h4>
-                <ol className="print-batting">
-                  {lineup.battingOrder.map((pid) => (
-                    <li key={pid}>{getPlayerName(pid)}</li>
-                  ))}
-                </ol>
+                  <h4>Batting Order</h4>
+                  <ol className="print-batting">
+                    {lineup.battingOrder.map((pid) => (
+                      <li key={pid}>{getPlayerName(pid)}</li>
+                    ))}
+                  </ol>
 
-                <h4>Field Positions</h4>
-                <div className="print-innings-grid">
-                  <table className="innings-table">
-                    <thead>
-                      <tr>
-                        <th>Pos</th>
-                        {Array.from({ length: INNINGS_PER_GAME }, (_, i) => (
-                          <th key={i}>Inn {i + 1}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {POSITIONS.map((pos) => (
-                        <tr key={pos}>
-                          <td className="pos-cell">{pos}</td>
-                          {lineup.innings.map((inning, i) => (
-                            <td key={i}>{getPlayerName(inning[pos])}</td>
+                  <h4>Field Positions</h4>
+                  <div className="print-innings-grid">
+                    <table className="innings-table">
+                      <thead>
+                        <tr>
+                          <th>Pos</th>
+                          {Array.from({ length: INNINGS_PER_GAME }, (_, i) => (
+                            <th key={i}>Inn {i + 1}</th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {POSITIONS.map((pos) => (
+                          <tr key={pos}>
+                            <td className="pos-cell">{pos}</td>
+                            {lineup.innings.map((inning, i) => (
+                              <td key={i}>{getPlayerName(inning[pos])}</td>
+                            ))}
+                          </tr>
+                        ))}
+                        {hasBench && (
+                          <tr className="bench-table-row">
+                            <td className="pos-cell bench-cell">BN</td>
+                            {lineup.bench.map((benchList, i) => (
+                              <td key={i} className="bench-cell">
+                                {benchList.map((pid) => getPlayerName(pid)).join(', ') || '—'}
+                              </td>
+                            ))}
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 function buildPrintHTML(lineup, getPlayerName) {
+  const hasBench = lineup.bench && lineup.bench.some((b) => b.length > 0);
+
   const battingRows = lineup.battingOrder
     .map((pid, i) => `<tr><td>${i + 1}</td><td>${getPlayerName(pid)}</td></tr>`)
     .join('');
@@ -130,6 +147,12 @@ function buildPrintHTML(lineup, getPlayerName) {
         .map((inn) => `<td>${getPlayerName(inn[pos])}</td>`)
         .join('')}</tr>`
   ).join('');
+
+  const benchRow = hasBench
+    ? `<tr style="background:#fff3e0"><td><strong>BN</strong></td>${lineup.bench
+        .map((bl) => `<td>${bl.map((pid) => getPlayerName(pid)).join(', ') || '—'}</td>`)
+        .join('')}</tr>`
+    : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -154,7 +177,7 @@ function buildPrintHTML(lineup, getPlayerName) {
   <h1>Game #${lineup.gameNumber} Lineup</h1>
   <div class="date">${new Date(lineup.date).toLocaleDateString()}</div>
 
-  <h2>Batting Order</h2>
+  <h2>Batting Order (${lineup.battingOrder.length} players)</h2>
   <table>
     <thead><tr><th>#</th><th>Player</th></tr></thead>
     <tbody>${battingRows}</tbody>
@@ -163,7 +186,7 @@ function buildPrintHTML(lineup, getPlayerName) {
   <h2>Field Positions</h2>
   <table>
     <thead><tr><th>Pos</th>${posHeaders}</tr></thead>
-    <tbody>${posRows}</tbody>
+    <tbody>${posRows}${benchRow}</tbody>
   </table>
 </body>
 </html>`;

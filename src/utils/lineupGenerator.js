@@ -1,4 +1,4 @@
-import { POSITIONS, INNINGS_PER_GAME } from './constants.js';
+import { POSITIONS, INNINGS_PER_GAME, FIELD_SPOTS } from './constants.js';
 
 /**
  * Shuffle an array using Fisher-Yates algorithm.
@@ -14,14 +14,12 @@ function shuffle(arr) {
 
 /**
  * Generate a batting order that hasn't been used before.
- * battingHistory is an array of previously used batting order strings (JSON).
- * Returns an array of player IDs in batting order.
+ * All players on the roster bat (continuous batting order).
  */
 export function generateBattingOrder(players, battingHistory) {
   const playerIds = players.map((p) => p.id);
   const historySet = new Set(battingHistory);
 
-  // Try up to 1000 times to find a unique order
   for (let attempt = 0; attempt < 1000; attempt++) {
     const order = shuffle(playerIds);
     const key = JSON.stringify(order);
@@ -30,92 +28,132 @@ export function generateBattingOrder(players, battingHistory) {
     }
   }
 
-  // If we've exhausted reasonable attempts, the history is likely full.
-  // Reset and return a fresh shuffle.
   return shuffle(playerIds);
-}
-
-/**
- * Check if a batting history is "full" — meaning all permutations have been used.
- * For 10 players this is 10! = 3,628,800 so practically this never fills up.
- */
-export function isBattingHistoryFull(players, battingHistory) {
-  // 10! is ~3.6M, so we'll never truly exhaust it. Return false.
-  return false;
 }
 
 /**
  * Generate position assignments for each inning.
  *
- * Each inning assigns every player to exactly one of the 10 positions.
- * Respects:
- *   - Player restrictions (positions they should NOT play)
- *   - Position history: tries to avoid repeating player→position combos from past games
+ * When roster > 10, each inning picks 10 players to field and the rest sit.
+ * Bench rotation is balanced so everyone sits out roughly equally.
  *
- * positionHistory: { [playerId]: { [position]: count } }
- * Returns: array of 6 objects, each mapping position → playerId
+ * Returns: { innings: [{pos: playerId}...], bench: [[playerId...]...] }
  */
-export function generatePositionAssignments(players, restrictions, positionHistory) {
+export function generatePositionAssignments(players, restrictions, positionHistory, benchHistory) {
   const playerIds = players.map((p) => p.id);
   const positions = [...POSITIONS];
+  const rosterSize = playerIds.length;
+  const benchSize = rosterSize - FIELD_SPOTS;
 
-  // Build a matrix of which positions each player CAN play
+  // Build eligible-positions map
   const canPlay = {};
   for (const pid of playerIds) {
     const restricted = restrictions[pid] || [];
     canPlay[pid] = positions.filter((pos) => !restricted.includes(pos));
   }
 
-  // Track positions played in THIS game (player → Set of positions)
+  // Track positions played in THIS game
   const gamePositions = {};
   playerIds.forEach((pid) => {
     gamePositions[pid] = new Set();
   });
 
+  // Track bench innings in THIS game
+  const gameBenchCount = {};
+  playerIds.forEach((pid) => {
+    gameBenchCount[pid] = 0;
+  });
+
   const innings = [];
+  const bench = [];
 
   for (let inning = 0; inning < INNINGS_PER_GAME; inning++) {
-    const assignment = assignInning(playerIds, positions, canPlay, positionHistory, gamePositions);
+    // Determine who sits this inning
+    let benchPlayers = [];
+
+    if (benchSize > 0) {
+      benchPlayers = pickBenchPlayers(
+        playerIds,
+        benchSize,
+        gameBenchCount,
+        benchHistory
+      );
+      benchPlayers.forEach((pid) => {
+        gameBenchCount[pid]++;
+      });
+    }
+
+    const fieldPlayers = playerIds.filter((pid) => !benchPlayers.includes(pid));
+
+    const assignment = assignInning(
+      fieldPlayers,
+      positions,
+      canPlay,
+      positionHistory,
+      gamePositions
+    );
+
     if (assignment) {
       innings.push(assignment);
-      // Update game positions tracker
       for (const [pos, pid] of Object.entries(assignment)) {
         gamePositions[pid].add(pos);
       }
     } else {
-      // Fallback: random assignment respecting only restrictions
-      const fallback = fallbackAssignment(playerIds, positions, canPlay);
+      const fallback = fallbackAssignment(fieldPlayers, positions, canPlay);
       innings.push(fallback);
       for (const [pos, pid] of Object.entries(fallback)) {
         gamePositions[pid].add(pos);
       }
     }
+
+    bench.push(benchPlayers);
   }
 
-  return innings;
+  return { innings, bench };
+}
+
+/**
+ * Pick which players sit on the bench for an inning.
+ * Prefers players who have sat out the least this game, then historically.
+ */
+function pickBenchPlayers(playerIds, benchSize, gameBenchCount, benchHistory) {
+  const scored = playerIds.map((pid) => ({
+    pid,
+    gameCount: gameBenchCount[pid],
+    histCount: benchHistory[pid] || 0,
+  }));
+
+  // Sort: fewest game bench innings first, then fewest historical, then random
+  scored.sort((a, b) => {
+    if (a.gameCount !== b.gameCount) return a.gameCount - b.gameCount;
+    if (a.histCount !== b.histCount) return a.histCount - b.histCount;
+    return Math.random() - 0.5;
+  });
+
+  // Take players who have sat least — but we want the ones who should sit MORE
+  // Actually we want the opposite: pick players who have sat the LEAST so far,
+  // because they're "due" to sit. Wait — we want to equalize, so pick players
+  // who have sat the LEAST so everyone ends up even.
+  // No — if someone has sat 0 times and another sat 2 times, the 0-sitter should sit next.
+  // So pick from lowest bench count.
+  return scored.slice(0, benchSize).map((s) => s.pid);
 }
 
 /**
  * Assign positions for a single inning using backtracking.
- * Tries to minimize repeated player→position combos across all history.
- * Also tries to give each player a different position each inning within this game.
  */
-function assignInning(playerIds, positions, canPlay, positionHistory, gamePositions) {
-  // Score a player-position combo: lower is better (less frequently played)
+function assignInning(fieldPlayers, positions, canPlay, positionHistory, gamePositions) {
   function score(pid, pos) {
     let s = 0;
-    // Heavily penalize positions already played this game
     if (gamePositions[pid].has(pos)) s += 1000;
-    // Add historical count
     const hist = positionHistory[pid] || {};
     s += hist[pos] || 0;
     return s;
   }
 
-  // Sort positions to assign hardest-to-fill first (fewest eligible players)
   const sortedPositions = [...positions].sort((a, b) => {
-    const aCount = playerIds.filter((pid) => canPlay[pid].includes(a)).length;
-    const bCount = playerIds.filter((pid) => canPlay[pid].includes(b)).length;
+    const aCount = fieldPlayers.filter((pid) => canPlay[pid].includes(a)).length;
+    const bCount = fieldPlayers.filter((pid) => canPlay[pid].includes(b)).length;
     return aCount - bCount;
   });
 
@@ -126,13 +164,11 @@ function assignInning(playerIds, positions, canPlay, positionHistory, gamePositi
     if (posIdx === sortedPositions.length) return true;
     const pos = sortedPositions[posIdx];
 
-    // Get eligible players sorted by score (prefer least-used)
-    const eligible = playerIds
+    const eligible = fieldPlayers
       .filter((pid) => !usedPlayers.has(pid) && canPlay[pid].includes(pos))
       .map((pid) => ({ pid, score: score(pid, pos) }))
       .sort((a, b) => a.score - b.score);
 
-    // Add some randomness among equally-scored players
     const grouped = groupByScore(eligible);
     const randomized = grouped.flatMap((group) => shuffle(group));
 
@@ -146,9 +182,7 @@ function assignInning(playerIds, positions, canPlay, positionHistory, gamePositi
     return false;
   }
 
-  if (backtrack(0)) {
-    return assignment;
-  }
+  if (backtrack(0)) return assignment;
   return null;
 }
 
@@ -169,8 +203,8 @@ function groupByScore(items) {
   return groups;
 }
 
-function fallbackAssignment(playerIds, positions, canPlay) {
-  const shuffledPlayers = shuffle(playerIds);
+function fallbackAssignment(fieldPlayers, positions, canPlay) {
+  const shuffledPlayers = shuffle(fieldPlayers);
   const shuffledPositions = shuffle(positions);
   const assignment = {};
   const used = new Set();
@@ -196,6 +230,19 @@ export function updatePositionHistory(positionHistory, innings) {
     for (const [pos, pid] of Object.entries(inning)) {
       if (!updated[pid]) updated[pid] = {};
       updated[pid][pos] = (updated[pid][pos] || 0) + 1;
+    }
+  }
+  return updated;
+}
+
+/**
+ * Update bench history with a completed game's bench assignments.
+ */
+export function updateBenchHistory(benchHistory, benchInnings) {
+  const updated = { ...benchHistory };
+  for (const benchList of benchInnings) {
+    for (const pid of benchList) {
+      updated[pid] = (updated[pid] || 0) + 1;
     }
   }
   return updated;

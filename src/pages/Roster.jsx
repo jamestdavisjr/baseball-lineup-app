@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { POSITIONS, POSITION_LABELS } from '../utils/constants.js';
+import { POSITIONS, POSITION_LABELS, MIN_PLAYERS } from '../utils/constants.js';
 
 export default function Roster({ players, addPlayer, removePlayer, updatePlayer }) {
   const [newName, setNewName] = useState('');
@@ -27,7 +27,10 @@ export default function Roster({ players, addPlayer, removePlayer, updatePlayer 
     <div className="page">
       <h2>Team Roster</h2>
       <p className="subtitle">
-        {players.length}/10 players &mdash; {players.length === 10 ? 'Ready to generate!' : 'Add players to get started'}
+        {players.length} player{players.length !== 1 ? 's' : ''} &mdash;{' '}
+        {players.length >= MIN_PLAYERS
+          ? `Ready to generate!${players.length > MIN_PLAYERS ? ` (${players.length - MIN_PLAYERS} will rotate bench)` : ''}`
+          : `Need at least ${MIN_PLAYERS} players`}
       </p>
 
       <form className="add-player-form" onSubmit={handleAdd}>
@@ -36,10 +39,9 @@ export default function Roster({ players, addPlayer, removePlayer, updatePlayer 
           placeholder="Player name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          disabled={players.length >= 10}
           maxLength={30}
         />
-        <button type="submit" disabled={players.length >= 10 || !newName.trim()}>
+        <button type="submit" disabled={!newName.trim()}>
           Add
         </button>
       </form>
@@ -101,7 +103,7 @@ export default function Roster({ players, addPlayer, removePlayer, updatePlayer 
 
       {players.length === 0 && (
         <div className="empty-state">
-          <p>No players yet. Add your 10 team members above!</p>
+          <p>No players yet. Add at least {MIN_PLAYERS} team members above!</p>
         </div>
       )}
     </div>

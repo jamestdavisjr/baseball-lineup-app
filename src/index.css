@@ -522,7 +522,53 @@ input {
   font-size: 1.1rem;
 }
 
+/* ========== Bench ========== */
+
+.bench-section {
+  border-top: 2px dashed var(--border);
+  padding-top: 4px;
+}
+
+.bench-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 14px 2px;
+}
+
+.bench-row {
+  background: #fafafa;
+}
+
+.bench-icon {
+  color: var(--text-secondary) !important;
+}
+
+.bench-cell {
+  background: #fff8ee;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.bench-table-row td {
+  background: #fff8ee;
+  font-style: italic;
+}
+
 /* ========== History ========== */
+
+.history-badge {
+  margin-left: 8px;
+  background: var(--primary);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  vertical-align: middle;
+}
 
 .history-list {
   display: flex;

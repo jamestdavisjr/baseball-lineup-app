@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { POSITIONS, POSITION_LABELS, INNINGS_PER_GAME } from '../utils/constants.js';
+import { POSITIONS, INNINGS_PER_GAME, MIN_PLAYERS } from '../utils/constants.js';
 
 export default function GenerateLineup({ players, generateLineup, saveLineup }) {
   const [lineup, setLineup] = useState(null);
@@ -52,18 +52,39 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
     setSaved(false);
   };
 
+  const swapFieldAndBench = (inningIdx, position, benchPlayerIdx) => {
+    if (!lineup) return;
+    const benchPid = lineup.bench[inningIdx][benchPlayerIdx];
+    const fieldPid = lineup.innings[inningIdx][position];
+
+    const newInnings = lineup.innings.map((inn, i) => {
+      if (i !== inningIdx) return { ...inn };
+      return { ...inn, [position]: benchPid };
+    });
+    const newBench = lineup.bench.map((b, i) => {
+      if (i !== inningIdx) return [...b];
+      const updated = [...b];
+      updated[benchPlayerIdx] = fieldPid;
+      return updated;
+    });
+    setLineup({ ...lineup, innings: newInnings, bench: newBench });
+    setSaved(false);
+  };
+
   const getPlayerName = (id) => {
     const p = players.find((pl) => pl.id === id);
     return p ? p.name : '?';
   };
 
-  if (players.length !== 10) {
+  const hasBench = players.length > MIN_PLAYERS;
+
+  if (players.length < MIN_PLAYERS) {
     return (
       <div className="page">
         <h2>Generate Lineup</h2>
         <div className="empty-state">
-          <p>You need exactly 10 players on your roster.</p>
-          <p>Currently: {players.length}/10</p>
+          <p>You need at least {MIN_PLAYERS} players on your roster.</p>
+          <p>Currently: {players.length}/{MIN_PLAYERS}</p>
           <button onClick={() => navigate('/roster')}>Go to Roster</button>
         </div>
       </div>
@@ -77,6 +98,9 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
       {!lineup && (
         <div className="generate-prompt">
           <p>Ready to create a new game lineup!</p>
+          <p className="section-hint">
+            {players.length} players &mdash; {hasBench ? `${players.length - MIN_PLAYERS} will rotate to bench` : 'all players field every inning'}
+          </p>
           <button className="btn-primary btn-large" onClick={handleGenerate}>
             Generate New Lineup
           </button>
@@ -103,7 +127,9 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
 
           <section className="lineup-section">
             <h3>Batting Order</h3>
-            <p className="section-hint">Use arrows to adjust order</p>
+            <p className="section-hint">
+              {hasBench ? 'All players bat (continuous order) — use arrows to adjust' : 'Use arrows to adjust order'}
+            </p>
             <div className="batting-order">
               {lineup.battingOrder.map((pid, idx) => (
                 <div key={pid} className="batting-row">
@@ -132,12 +158,17 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
 
           <section className="lineup-section">
             <h3>Field Positions by Inning</h3>
-            <p className="section-hint">Tap two players in an inning to swap them</p>
+            <p className="section-hint">
+              Tap two players in an inning to swap them
+              {hasBench ? ' — tap bench player then field position to swap in/out' : ''}
+            </p>
             <InningTabs
               lineup={lineup}
               players={players}
               getPlayerName={getPlayerName}
               swapPosition={swapPosition}
+              swapFieldAndBench={swapFieldAndBench}
+              hasBench={hasBench}
             />
           </section>
         </>
@@ -146,12 +177,18 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
   );
 }
 
-function InningTabs({ lineup, players, getPlayerName, swapPosition }) {
+function InningTabs({ lineup, players, getPlayerName, swapPosition, swapFieldAndBench, hasBench }) {
   const [activeInning, setActiveInning] = useState(0);
   const [selectedPos, setSelectedPos] = useState(null);
+  const [selectedBenchIdx, setSelectedBenchIdx] = useState(null);
 
   const handlePosClick = (pos) => {
-    if (selectedPos === null) {
+    if (selectedBenchIdx !== null) {
+      // Swap bench player into this field position
+      swapFieldAndBench(activeInning, pos, selectedBenchIdx);
+      setSelectedBenchIdx(null);
+      setSelectedPos(null);
+    } else if (selectedPos === null) {
       setSelectedPos(pos);
     } else if (selectedPos === pos) {
       setSelectedPos(null);
@@ -161,7 +198,21 @@ function InningTabs({ lineup, players, getPlayerName, swapPosition }) {
     }
   };
 
+  const handleBenchClick = (benchIdx) => {
+    if (selectedPos !== null) {
+      // Swap field player to bench
+      swapFieldAndBench(activeInning, selectedPos, benchIdx);
+      setSelectedPos(null);
+      setSelectedBenchIdx(null);
+    } else if (selectedBenchIdx === benchIdx) {
+      setSelectedBenchIdx(null);
+    } else {
+      setSelectedBenchIdx(benchIdx);
+    }
+  };
+
   const inning = lineup.innings[activeInning];
+  const benchPlayers = lineup.bench?.[activeInning] || [];
 
   const getRestrictionWarning = (pos, pid) => {
     const player = players.find((p) => p.id === pid);
@@ -181,6 +232,7 @@ function InningTabs({ lineup, players, getPlayerName, swapPosition }) {
             onClick={() => {
               setActiveInning(i);
               setSelectedPos(null);
+              setSelectedBenchIdx(null);
             }}
           >
             {i + 1}
@@ -204,6 +256,21 @@ function InningTabs({ lineup, players, getPlayerName, swapPosition }) {
           );
         })}
       </div>
+      {hasBench && benchPlayers.length > 0 && (
+        <div className="bench-section">
+          <div className="bench-label">Bench</div>
+          {benchPlayers.map((pid, idx) => (
+            <div
+              key={pid}
+              className={`position-row bench-row ${selectedBenchIdx === idx ? 'selected' : ''}`}
+              onClick={() => handleBenchClick(idx)}
+            >
+              <span className="pos-label bench-icon">BN</span>
+              <span className="pos-player">{getPlayerName(pid)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

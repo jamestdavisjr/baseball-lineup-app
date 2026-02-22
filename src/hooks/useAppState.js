@@ -8,25 +8,31 @@ import {
   saveBattingHistory,
   loadPositionHistory,
   savePositionHistory,
+  loadBenchHistory,
+  saveBenchHistory,
   clearAllData,
 } from '../utils/storage.js';
 import {
   generateBattingOrder,
   generatePositionAssignments,
   updatePositionHistory,
+  updateBenchHistory,
 } from '../utils/lineupGenerator.js';
+import { MIN_PLAYERS } from '../utils/constants.js';
 
 export function useAppState() {
   const [players, setPlayers] = useState(() => loadPlayers());
   const [lineups, setLineups] = useState(() => loadLineups());
   const [battingHistory, setBattingHistory] = useState(() => loadBattingHistory());
   const [positionHistory, setPositionHistory] = useState(() => loadPositionHistory());
+  const [benchHistory, setBenchHistory] = useState(() => loadBenchHistory());
 
   // Persist on change
   useEffect(() => savePlayers(players), [players]);
   useEffect(() => saveLineups(lineups), [lineups]);
   useEffect(() => saveBattingHistory(battingHistory), [battingHistory]);
   useEffect(() => savePositionHistory(positionHistory), [positionHistory]);
+  useEffect(() => saveBenchHistory(benchHistory), [benchHistory]);
 
   const addPlayer = useCallback((name) => {
     const id = crypto.randomUUID();
@@ -44,7 +50,7 @@ export function useAppState() {
   }, []);
 
   const generateLineup = useCallback(() => {
-    if (players.length !== 10) return null;
+    if (players.length < MIN_PLAYERS) return null;
 
     const restrictions = {};
     players.forEach((p) => {
@@ -52,10 +58,11 @@ export function useAppState() {
     });
 
     const battingOrder = generateBattingOrder(players, battingHistory);
-    const positionAssignments = generatePositionAssignments(
+    const { innings, bench } = generatePositionAssignments(
       players,
       restrictions,
-      positionHistory
+      positionHistory,
+      benchHistory
     );
 
     const lineup = {
@@ -63,17 +70,21 @@ export function useAppState() {
       date: new Date().toISOString(),
       gameNumber: lineups.length + 1,
       battingOrder,
-      innings: positionAssignments,
+      innings,
+      bench,
     };
 
     return lineup;
-  }, [players, battingHistory, positionHistory, lineups]);
+  }, [players, battingHistory, positionHistory, benchHistory, lineups]);
 
   const saveLineup = useCallback(
     (lineup) => {
       setLineups((prev) => [...prev, lineup]);
       setBattingHistory((prev) => [...prev, JSON.stringify(lineup.battingOrder)]);
       setPositionHistory((prev) => updatePositionHistory(prev, lineup.innings));
+      if (lineup.bench) {
+        setBenchHistory((prev) => updateBenchHistory(prev, lineup.bench));
+      }
     },
     []
   );
@@ -85,6 +96,7 @@ export function useAppState() {
   const resetHistory = useCallback(() => {
     setBattingHistory([]);
     setPositionHistory({});
+    setBenchHistory({});
   }, []);
 
   const resetAll = useCallback(() => {
@@ -93,6 +105,7 @@ export function useAppState() {
     setLineups([]);
     setBattingHistory([]);
     setPositionHistory({});
+    setBenchHistory({});
   }, []);
 
   return {
@@ -100,6 +113,7 @@ export function useAppState() {
     lineups,
     battingHistory,
     positionHistory,
+    benchHistory,
     addPlayer,
     removePlayer,
     updatePlayer,
