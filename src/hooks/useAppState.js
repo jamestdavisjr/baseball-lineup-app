@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   loadPlayers,
   savePlayers,
@@ -14,6 +14,7 @@ import {
   saveTeamName,
   clearAllData,
 } from '../utils/storage.js';
+import { loadAllData, saveAllData } from '../utils/firestoreStorage.js';
 import {
   generateBattingOrder,
   generatePositionAssignments,
@@ -22,21 +23,109 @@ import {
 } from '../utils/lineupGenerator.js';
 import { MIN_PLAYERS } from '../utils/constants.js';
 
-export function useAppState() {
+export function useAppState(user) {
   const [players, setPlayers] = useState(() => loadPlayers());
   const [lineups, setLineups] = useState(() => loadLineups());
   const [battingHistory, setBattingHistory] = useState(() => loadBattingHistory());
   const [positionHistory, setPositionHistory] = useState(() => loadPositionHistory());
   const [benchHistory, setBenchHistory] = useState(() => loadBenchHistory());
   const [teamName, setTeamName] = useState(() => loadTeamName());
+  const [firestoreLoaded, setFirestoreLoaded] = useState(false);
 
-  // Persist on change
+  // Avoid Firestore writes during initial load
+  const initialLoadDone = useRef(false);
+  const firestoreSaveTimer = useRef(null);
+
+  // ---- Load from Firestore when user signs in ----
+  useEffect(() => {
+    if (!user) {
+      setFirestoreLoaded(false);
+      initialLoadDone.current = false;
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await loadAllData(user.uid);
+        if (cancelled) return;
+
+        if (data) {
+          setPlayers(data.players || []);
+          setLineups(data.lineups || []);
+          setBattingHistory(data.battingHistory || []);
+          setPositionHistory(data.positionHistory || {});
+          setBenchHistory(data.benchHistory || {});
+          setTeamName(data.teamName || '');
+
+          // Update localStorage as offline cache
+          savePlayers(data.players || []);
+          saveLineups(data.lineups || []);
+          saveBattingHistory(data.battingHistory || []);
+          savePositionHistory(data.positionHistory || {});
+          saveBenchHistory(data.benchHistory || {});
+          saveTeamName(data.teamName || '');
+        } else {
+          // First sign-in — push current localStorage data to Firestore
+          await saveAllData(user.uid, {
+            players,
+            lineups,
+            battingHistory,
+            positionHistory,
+            benchHistory,
+            teamName,
+          });
+        }
+      } catch (err) {
+        console.error('Firestore load failed, using localStorage:', err);
+      }
+
+      if (!cancelled) {
+        setFirestoreLoaded(true);
+        setTimeout(() => {
+          initialLoadDone.current = true;
+        }, 100);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
+
+  // ---- Persist to localStorage (always) ----
   useEffect(() => savePlayers(players), [players]);
   useEffect(() => saveLineups(lineups), [lineups]);
   useEffect(() => saveBattingHistory(battingHistory), [battingHistory]);
   useEffect(() => savePositionHistory(positionHistory), [positionHistory]);
   useEffect(() => saveBenchHistory(benchHistory), [benchHistory]);
   useEffect(() => saveTeamName(teamName), [teamName]);
+
+  // ---- Persist to Firestore (debounced, when signed in) ----
+  useEffect(() => {
+    if (!user || !initialLoadDone.current) return;
+
+    if (firestoreSaveTimer.current) clearTimeout(firestoreSaveTimer.current);
+
+    firestoreSaveTimer.current = setTimeout(() => {
+      saveAllData(user.uid, {
+        players,
+        lineups,
+        battingHistory,
+        positionHistory,
+        benchHistory,
+        teamName,
+      }).catch((err) => console.error('Firestore save failed:', err));
+    }, 500);
+
+    return () => {
+      if (firestoreSaveTimer.current) clearTimeout(firestoreSaveTimer.current);
+    };
+  }, [user, players, lineups, battingHistory, positionHistory, benchHistory, teamName]);
+
+  // ---- Mutations ----
 
   const addPlayer = useCallback((name) => {
     const id = crypto.randomUUID();
@@ -136,5 +225,6 @@ export function useAppState() {
     deleteLineup,
     resetHistory,
     resetAll,
+    firestoreLoaded,
   };
 }

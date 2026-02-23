@@ -1,5 +1,7 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext.jsx';
 import { useAppState } from './hooks/useAppState.js';
+import Login from './pages/Login.jsx';
 import Roster from './pages/Roster.jsx';
 import GenerateLineup from './pages/GenerateLineup.jsx';
 import History from './pages/History.jsx';
@@ -7,12 +9,33 @@ import Settings from './pages/Settings.jsx';
 import './App.css';
 
 function App() {
-  const state = useAppState();
+  const { user, loading, logOut } = useAuth();
+  const state = useAppState(user);
+
+  if (loading) {
+    return (
+      <div className="app">
+        <div className="loading-screen">
+          <div className="loading-spinner" />
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1>{state.teamName ? `${state.teamName} Lineup Generator` : 'Lineup Generator'}</h1>
+        <div className="header-content">
+          <h1>{state.teamName ? `${state.teamName} Lineup Generator` : 'Lineup Generator'}</h1>
+          <button className="btn-signout" onClick={logOut} title="Sign out">
+            Sign Out
+          </button>
+        </div>
       </header>
 
       <main className="app-main">
