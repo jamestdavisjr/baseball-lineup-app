@@ -14,48 +14,53 @@ function teamDocRef(uid) {
   return doc(db, 'users', uid, 'teams', 'default');
 }
 
-// Firestore doesn't support nested arrays. lineup.bench is an array of arrays
-// (each inning has an array of benched player IDs), so we convert each inner
-// array to a comma-joined string before saving, and split it back on load.
+// Firestore doesn't support nested arrays. Rather than hunting for every
+// specific field, we deep-walk the data and JSON-stringify any array element
+// that is itself an array, prefixed with a marker so we can restore it on load.
 
-function sanitizeForFirestore(data) {
-  if (!data.lineups) return data;
-  return {
-    ...data,
-    lineups: data.lineups.map((lineup) => ({
-      ...lineup,
-      bench: lineup.bench
-        ? lineup.bench.map((inningBench) =>
-            Array.isArray(inningBench) ? inningBench.join(',') : inningBench
-          )
-        : [],
-    })),
-  };
+const NESTED_ARRAY_PREFIX = '__arr__';
+
+function deepSanitize(value, insideArray = false) {
+  if (Array.isArray(value)) {
+    if (insideArray) {
+      // Nested array — serialize to a marked JSON string
+      return NESTED_ARRAY_PREFIX + JSON.stringify(value);
+    }
+    return value.map((item) => deepSanitize(item, true));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = deepSanitize(v, false);
+    }
+    return out;
+  }
+  return value;
 }
 
-function deserializeFromFirestore(data) {
-  if (!data.lineups) return data;
-  return {
-    ...data,
-    lineups: data.lineups.map((lineup) => ({
-      ...lineup,
-      bench: lineup.bench
-        ? lineup.bench.map((inningBench) =>
-            typeof inningBench === 'string' && inningBench.length > 0
-              ? inningBench.split(',')
-              : Array.isArray(inningBench) ? inningBench : []
-          )
-        : [],
-    })),
-  };
+function deepRestore(value) {
+  if (typeof value === 'string' && value.startsWith(NESTED_ARRAY_PREFIX)) {
+    return JSON.parse(value.slice(NESTED_ARRAY_PREFIX.length));
+  }
+  if (Array.isArray(value)) {
+    return value.map(deepRestore);
+  }
+  if (value !== null && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = deepRestore(v);
+    }
+    return out;
+  }
+  return value;
 }
 
 export async function loadAllData(uid) {
   const snap = await getDoc(teamDocRef(uid));
   if (!snap.exists()) return null;
-  return deserializeFromFirestore(snap.data());
+  return deepRestore(snap.data());
 }
 
 export async function saveAllData(uid, data) {
-  await setDoc(teamDocRef(uid), sanitizeForFirestore(data));
+  await setDoc(teamDocRef(uid), deepSanitize(data));
 }
