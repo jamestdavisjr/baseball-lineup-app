@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   BATTING_HISTORY: 'baseball-batting-history',
   POSITION_HISTORY: 'baseball-position-history',
   BENCH_HISTORY: 'baseball-bench-history',
+  TEAM_NAME: 'baseball-lineup-team-name',
 };
 
 export function loadPlayers() {
@@ -69,6 +70,18 @@ export function loadBenchHistory() {
 
 export function saveBenchHistory(history) {
   localStorage.setItem(STORAGE_KEYS.BENCH_HISTORY, JSON.stringify(history));
+}
+
+export function loadTeamName() {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.TEAM_NAME) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveTeamName(name) {
+  localStorage.setItem(STORAGE_KEYS.TEAM_NAME, name);
 }
 
 export function clearAllData() {

@@ -10,6 +10,8 @@ import {
   savePositionHistory,
   loadBenchHistory,
   saveBenchHistory,
+  loadTeamName,
+  saveTeamName,
   clearAllData,
 } from '../utils/storage.js';
 import {
@@ -26,6 +28,7 @@ export function useAppState() {
   const [battingHistory, setBattingHistory] = useState(() => loadBattingHistory());
   const [positionHistory, setPositionHistory] = useState(() => loadPositionHistory());
   const [benchHistory, setBenchHistory] = useState(() => loadBenchHistory());
+  const [teamName, setTeamName] = useState(() => loadTeamName());
 
   // Persist on change
   useEffect(() => savePlayers(players), [players]);
@@ -33,6 +36,7 @@ export function useAppState() {
   useEffect(() => saveBattingHistory(battingHistory), [battingHistory]);
   useEffect(() => savePositionHistory(positionHistory), [positionHistory]);
   useEffect(() => saveBenchHistory(benchHistory), [benchHistory]);
+  useEffect(() => saveTeamName(teamName), [teamName]);
 
   const addPlayer = useCallback((name) => {
     const id = crypto.randomUUID();
@@ -89,6 +93,12 @@ export function useAppState() {
     []
   );
 
+  const updateLineup = useCallback((id, updates) => {
+    setLineups((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, ...updates } : l))
+    );
+  }, []);
+
   const deleteLineup = useCallback((id) => {
     setLineups((prev) => prev.filter((l) => l.id !== id));
   }, []);
@@ -106,6 +116,7 @@ export function useAppState() {
     setBattingHistory([]);
     setPositionHistory({});
     setBenchHistory({});
+    setTeamName('');
   }, []);
 
   return {
@@ -114,11 +125,14 @@ export function useAppState() {
     battingHistory,
     positionHistory,
     benchHistory,
+    teamName,
+    setTeamName,
     addPlayer,
     removePlayer,
     updatePlayer,
     generateLineup,
     saveLineup,
+    updateLineup,
     deleteLineup,
     resetHistory,
     resetAll,

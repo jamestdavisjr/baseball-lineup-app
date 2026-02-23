@@ -12,7 +12,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Lineup Generator</h1>
+        <h1>{state.teamName ? `${state.teamName} Lineup Generator` : 'Lineup Generator'}</h1>
       </header>
 
       <main className="app-main">
@@ -45,6 +45,8 @@ function App() {
               <History
                 players={state.players}
                 lineups={state.lineups}
+                teamName={state.teamName}
+                updateLineup={state.updateLineup}
                 deleteLineup={state.deleteLineup}
               />
             }
@@ -57,6 +59,8 @@ function App() {
                 resetAll={state.resetAll}
                 lineups={state.lineups}
                 battingHistory={state.battingHistory}
+                teamName={state.teamName}
+                setTeamName={state.setTeamName}
               />
             }
           />

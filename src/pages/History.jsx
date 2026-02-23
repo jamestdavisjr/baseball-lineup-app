@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { INNINGS_PER_GAME } from '../utils/constants.js';
 
 /**
@@ -25,19 +25,34 @@ function buildPlayerInningMap(lineup) {
   return map;
 }
 
-export default function History({ players, lineups, deleteLineup }) {
+function formatGameTitle(lineup) {
+  if (lineup.opponentName) {
+    return `vs. ${lineup.opponentName}`;
+  }
+  return `Game #${lineup.gameNumber}`;
+}
+
+export default function History({ players, lineups, teamName, updateLineup, deleteLineup }) {
   const [expandedId, setExpandedId] = useState(null);
+  const debounceRef = useRef(null);
 
   const getPlayerName = (id) => {
     const p = players.find((pl) => pl.id === id);
     return p ? p.name : '(removed)';
   };
 
+  const handleNotesChange = useCallback((lineupId, value) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      updateLineup(lineupId, { notes: value });
+    }, 400);
+  }, [updateLineup]);
+
   const handlePrint = (lineup) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const html = buildPrintHTML(lineup, getPlayerName);
+    const html = buildPrintHTML(lineup, getPlayerName, teamName);
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.onload = () => {
@@ -75,7 +90,7 @@ export default function History({ players, lineups, deleteLineup }) {
                 }
               >
                 <div>
-                  <strong>Game #{lineup.gameNumber}</strong>
+                  <strong>{formatGameTitle(lineup)}</strong>
                   <span className="history-date">
                     {new Date(lineup.date).toLocaleDateString()}
                   </span>
@@ -137,6 +152,17 @@ export default function History({ players, lineups, deleteLineup }) {
                       </tbody>
                     </table>
                   </div>
+
+                  <div className="game-notes-section">
+                    <h4>Game Notes</h4>
+                    <textarea
+                      className="game-notes-textarea"
+                      defaultValue={lineup.notes || ''}
+                      onChange={(e) => handleNotesChange(lineup.id, e.target.value)}
+                      placeholder="Jot down notes from this game..."
+                    />
+                    <p className="notes-saved-hint">Notes save automatically</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -147,8 +173,11 @@ export default function History({ players, lineups, deleteLineup }) {
   );
 }
 
-function buildPrintHTML(lineup, getPlayerName) {
+function buildPrintHTML(lineup, getPlayerName, teamName) {
   const playerInningMap = buildPlayerInningMap(lineup);
+  const title = lineup.opponentName
+    ? `${teamName ? teamName + ' ' : ''}vs. ${lineup.opponentName}`
+    : `Game #${lineup.gameNumber}`;
 
   const inningHeaders = Array.from(
     { length: INNINGS_PER_GAME },
@@ -168,10 +197,14 @@ function buildPrintHTML(lineup, getPlayerName) {
     })
     .join('');
 
+  const notesSection = lineup.notes
+    ? `<div class="notes"><h3>Game Notes</h3><p>${lineup.notes.replace(/\n/g, '<br>')}</p></div>`
+    : '';
+
   return `<!DOCTYPE html>
 <html>
 <head>
-  <title>Game #${lineup.gameNumber} - ${new Date(lineup.date).toLocaleDateString()}</title>
+  <title>${title} - ${new Date(lineup.date).toLocaleDateString()}</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
     h1 { font-size: 22px; margin-bottom: 4px; }
@@ -182,6 +215,9 @@ function buildPrintHTML(lineup, getPlayerName) {
     td:first-child { text-align: center; font-weight: bold; width: 30px; }
     td:nth-child(2) { text-align: left; font-weight: 500; white-space: nowrap; }
     .bench-cell { background: #fff8ee; font-style: italic; color: #999; }
+    .notes { margin-top: 16px; }
+    .notes h3 { font-size: 16px; margin-bottom: 6px; color: #333; }
+    .notes p { font-size: 13px; color: #444; line-height: 1.6; }
     @media print {
       body { padding: 0; }
       th { background: #333 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -190,13 +226,14 @@ function buildPrintHTML(lineup, getPlayerName) {
   </style>
 </head>
 <body>
-  <h1>Game #${lineup.gameNumber} Lineup</h1>
+  <h1>${title}</h1>
   <div class="date">${new Date(lineup.date).toLocaleDateString()}</div>
 
   <table>
     <thead><tr><th>#</th><th style="text-align:left">Player</th>${inningHeaders}</tr></thead>
     <tbody>${playerRows}</tbody>
   </table>
+  ${notesSection}
 </body>
 </html>`;
 }

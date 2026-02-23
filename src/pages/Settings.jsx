@@ -1,7 +1,23 @@
-export default function Settings({ resetHistory, resetAll, lineups, battingHistory }) {
+export default function Settings({ resetHistory, resetAll, lineups, battingHistory, teamName, setTeamName }) {
   return (
     <div className="page">
       <h2>Settings</h2>
+
+      <div className="settings-section">
+        <h3>Team Name</h3>
+        <div className="team-name-form">
+          <input
+            type="text"
+            value={teamName}
+            onChange={(e) => setTeamName(e.target.value)}
+            placeholder="Enter your team name"
+            maxLength={40}
+          />
+        </div>
+        <p className="settings-hint">
+          Shown in the header and on printed lineups.
+        </p>
+      </div>
 
       <div className="settings-section">
         <h3>History Stats</h3>

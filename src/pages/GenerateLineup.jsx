@@ -30,11 +30,14 @@ function buildPlayerInningMap(lineup) {
 export default function GenerateLineup({ players, generateLineup, saveLineup }) {
   const [lineup, setLineup] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [opponentName, setOpponentName] = useState('');
   const navigate = useNavigate();
 
   const handleGenerate = () => {
     const newLineup = generateLineup();
     if (newLineup) {
+      newLineup.opponentName = opponentName.trim();
+      newLineup.notes = '';
       setLineup(newLineup);
       setSaved(false);
     }
@@ -126,6 +129,16 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
           <p className="section-hint">
             {players.length} players &mdash; {hasBench ? `${players.length - MIN_PLAYERS} will rotate to bench` : 'all players field every inning'}
           </p>
+          <div className="opponent-field">
+            <input
+              type="text"
+              className="opponent-input"
+              value={opponentName}
+              onChange={(e) => setOpponentName(e.target.value)}
+              placeholder="Opponent (e.g. Tigers)"
+              maxLength={40}
+            />
+          </div>
           <button className="btn-primary btn-large" onClick={handleGenerate}>
             Generate New Lineup
           </button>
@@ -157,7 +170,6 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
             </p>
             <LineupCard
               lineup={lineup}
-              players={players}
               getPlayerName={getPlayerName}
               swapBattingOrder={swapBattingOrder}
             />
@@ -184,7 +196,7 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
   );
 }
 
-function LineupCard({ lineup, players, getPlayerName, swapBattingOrder }) {
+function LineupCard({ lineup, getPlayerName, swapBattingOrder }) {
   const playerInningMap = buildPlayerInningMap(lineup);
 
   return (
