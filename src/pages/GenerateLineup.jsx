@@ -2,6 +2,31 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { POSITIONS, INNINGS_PER_GAME, MIN_PLAYERS } from '../utils/constants.js';
 
+/**
+ * Build a map of playerId → [position for inning 0, inning 1, ...].
+ * Players on the bench get "BN".
+ */
+function buildPlayerInningMap(lineup) {
+  const map = {};
+  for (const pid of lineup.battingOrder) {
+    map[pid] = [];
+  }
+  for (let i = 0; i < INNINGS_PER_GAME; i++) {
+    const inning = lineup.innings[i];
+    const benchList = lineup.bench?.[i] || [];
+    // Mark everyone as BN first, then override with actual position
+    for (const pid of lineup.battingOrder) {
+      map[pid].push(benchList.includes(pid) ? 'BN' : null);
+    }
+    for (const [pos, pid] of Object.entries(inning)) {
+      if (map[pid]) {
+        map[pid][i] = pos;
+      }
+    }
+  }
+  return map;
+}
+
 export default function GenerateLineup({ players, generateLineup, saveLineup }) {
   const [lineup, setLineup] = useState(null);
   const [saved, setSaved] = useState(false);
@@ -126,38 +151,20 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
           </div>
 
           <section className="lineup-section">
-            <h3>Batting Order</h3>
+            <h3>Lineup Card</h3>
             <p className="section-hint">
-              {hasBench ? 'All players bat (continuous order) — use arrows to adjust' : 'Use arrows to adjust order'}
+              Batting order with positions per inning. Use arrows to reorder batters.
             </p>
-            <div className="batting-order">
-              {lineup.battingOrder.map((pid, idx) => (
-                <div key={pid} className="batting-row">
-                  <span className="batting-num">{idx + 1}.</span>
-                  <span className="batting-name">{getPlayerName(pid)}</span>
-                  <div className="batting-arrows">
-                    <button
-                      className="btn-arrow"
-                      disabled={idx === 0}
-                      onClick={() => swapBattingOrder(idx, idx - 1)}
-                    >
-                      ▲
-                    </button>
-                    <button
-                      className="btn-arrow"
-                      disabled={idx === lineup.battingOrder.length - 1}
-                      onClick={() => swapBattingOrder(idx, idx + 1)}
-                    >
-                      ▼
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <LineupCard
+              lineup={lineup}
+              players={players}
+              getPlayerName={getPlayerName}
+              swapBattingOrder={swapBattingOrder}
+            />
           </section>
 
           <section className="lineup-section">
-            <h3>Field Positions by Inning</h3>
+            <h3>Edit Positions by Inning</h3>
             <p className="section-hint">
               Tap two players in an inning to swap them
               {hasBench ? ' — tap bench player then field position to swap in/out' : ''}
@@ -177,6 +184,59 @@ export default function GenerateLineup({ players, generateLineup, saveLineup }) 
   );
 }
 
+function LineupCard({ lineup, players, getPlayerName, swapBattingOrder }) {
+  const playerInningMap = buildPlayerInningMap(lineup);
+
+  return (
+    <div className="lineup-card-grid">
+      <table className="lineup-table">
+        <thead>
+          <tr>
+            <th className="col-order">#</th>
+            <th className="col-name">Player</th>
+            {Array.from({ length: INNINGS_PER_GAME }, (_, i) => (
+              <th key={i} className="col-inning">{i + 1}</th>
+            ))}
+            <th className="col-arrows"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {lineup.battingOrder.map((pid, idx) => {
+            const positions = playerInningMap[pid] || [];
+            return (
+              <tr key={pid}>
+                <td className="cell-order">{idx + 1}</td>
+                <td className="cell-name">{getPlayerName(pid)}</td>
+                {positions.map((pos, i) => (
+                  <td key={i} className={`cell-pos ${pos === 'BN' ? 'cell-bench' : ''}`}>
+                    {pos || '—'}
+                  </td>
+                ))}
+                <td className="cell-arrows">
+                  <button
+                    className="btn-arrow-sm"
+                    disabled={idx === 0}
+                    onClick={() => swapBattingOrder(idx, idx - 1)}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    className="btn-arrow-sm"
+                    disabled={idx === lineup.battingOrder.length - 1}
+                    onClick={() => swapBattingOrder(idx, idx + 1)}
+                  >
+                    ▼
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function InningTabs({ lineup, players, getPlayerName, swapPosition, swapFieldAndBench, hasBench }) {
   const [activeInning, setActiveInning] = useState(0);
   const [selectedPos, setSelectedPos] = useState(null);
@@ -184,7 +244,6 @@ function InningTabs({ lineup, players, getPlayerName, swapPosition, swapFieldAnd
 
   const handlePosClick = (pos) => {
     if (selectedBenchIdx !== null) {
-      // Swap bench player into this field position
       swapFieldAndBench(activeInning, pos, selectedBenchIdx);
       setSelectedBenchIdx(null);
       setSelectedPos(null);
@@ -200,7 +259,6 @@ function InningTabs({ lineup, players, getPlayerName, swapPosition, swapFieldAnd
 
   const handleBenchClick = (benchIdx) => {
     if (selectedPos !== null) {
-      // Swap field player to bench
       swapFieldAndBench(activeInning, selectedPos, benchIdx);
       setSelectedPos(null);
       setSelectedBenchIdx(null);
@@ -216,10 +274,7 @@ function InningTabs({ lineup, players, getPlayerName, swapPosition, swapFieldAnd
 
   const getRestrictionWarning = (pos, pid) => {
     const player = players.find((p) => p.id === pid);
-    if (player && player.restrictions?.includes(pos)) {
-      return true;
-    }
-    return false;
+    return player && player.restrictions?.includes(pos);
   };
 
   return (

@@ -385,66 +385,108 @@ input {
   color: var(--primary-dark);
 }
 
-/* ========== Batting Order ========== */
+/* ========== Combined Lineup Card Table ========== */
 
-.batting-order {
+.lineup-card-grid {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  overflow: hidden;
 }
 
-.batting-row {
-  display: flex;
-  align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid #f0f0f0;
+.lineup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  min-width: 420px;
 }
 
-.batting-row:last-child {
-  border-bottom: none;
+.lineup-table th,
+.lineup-table td {
+  border: 1px solid var(--border);
+  padding: 8px 6px;
+  text-align: center;
 }
 
-.batting-num {
+.lineup-table thead th {
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+  font-size: 0.8rem;
+  position: sticky;
+  top: 0;
+}
+
+.col-order {
+  width: 32px;
+}
+
+.col-name {
+  text-align: left !important;
+  min-width: 90px;
+}
+
+.col-inning {
+  width: 44px;
+}
+
+.col-arrows {
+  width: 52px;
+}
+
+.cell-order {
   font-weight: 700;
   color: var(--primary);
-  min-width: 30px;
-  font-size: 0.95rem;
 }
 
-.batting-name {
-  flex: 1;
-  font-weight: 500;
+.cell-name {
+  text-align: left !important;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.batting-arrows {
-  display: flex;
-  gap: 4px;
-}
-
-.btn-arrow {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: var(--bg);
+.cell-pos {
+  font-weight: 600;
   font-size: 0.8rem;
   color: var(--text);
+}
+
+.cell-bench {
+  background: #fff8ee;
+  font-style: italic;
+  color: #999;
+  font-weight: 400;
+}
+
+.cell-arrows {
+  white-space: nowrap;
+}
+
+.btn-arrow-sm {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 0.7rem;
+  color: var(--text);
+  margin: 0 1px;
   transition: background 0.2s;
 }
 
-.btn-arrow:disabled {
-  opacity: 0.3;
+.btn-arrow-sm:disabled {
+  opacity: 0.25;
   cursor: not-allowed;
 }
 
-.btn-arrow:not(:disabled):hover {
+.btn-arrow-sm:not(:disabled):hover {
   background: #e0e0e0;
 }
 
-/* ========== Inning Tabs ========== */
+/* ========== Inning Tabs (Edit Mode) ========== */
 
 .inning-tabs-container {
   background: var(--surface);

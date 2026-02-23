@@ -1,5 +1,29 @@
 import { useState } from 'react';
-import { POSITIONS, INNINGS_PER_GAME } from '../utils/constants.js';
+import { INNINGS_PER_GAME } from '../utils/constants.js';
+
+/**
+ * Build a map of playerId → [position for inning 0, inning 1, ...].
+ * Players on the bench get "BN".
+ */
+function buildPlayerInningMap(lineup) {
+  const map = {};
+  for (const pid of lineup.battingOrder) {
+    map[pid] = [];
+  }
+  for (let i = 0; i < INNINGS_PER_GAME; i++) {
+    const inning = lineup.innings[i];
+    const benchList = lineup.bench?.[i] || [];
+    for (const pid of lineup.battingOrder) {
+      map[pid].push(benchList.includes(pid) ? 'BN' : null);
+    }
+    for (const [pos, pid] of Object.entries(inning)) {
+      if (map[pid]) {
+        map[pid][i] = pos;
+      }
+    }
+  }
+  return map;
+}
 
 export default function History({ players, lineups, deleteLineup }) {
   const [expandedId, setExpandedId] = useState(null);
@@ -40,6 +64,7 @@ export default function History({ players, lineups, deleteLineup }) {
       <div className="history-list">
         {[...lineups].reverse().map((lineup) => {
           const hasBench = lineup.bench && lineup.bench.some((b) => b.length > 0);
+          const playerInningMap = buildPlayerInningMap(lineup);
 
           return (
             <div key={lineup.id} className="history-card">
@@ -83,43 +108,32 @@ export default function History({ players, lineups, deleteLineup }) {
                     </button>
                   </div>
 
-                  <h4>Batting Order</h4>
-                  <ol className="print-batting">
-                    {lineup.battingOrder.map((pid) => (
-                      <li key={pid}>{getPlayerName(pid)}</li>
-                    ))}
-                  </ol>
-
-                  <h4>Field Positions</h4>
-                  <div className="print-innings-grid">
-                    <table className="innings-table">
+                  <div className="lineup-card-grid">
+                    <table className="lineup-table">
                       <thead>
                         <tr>
-                          <th>Pos</th>
+                          <th className="col-order">#</th>
+                          <th className="col-name">Player</th>
                           {Array.from({ length: INNINGS_PER_GAME }, (_, i) => (
-                            <th key={i}>Inn {i + 1}</th>
+                            <th key={i} className="col-inning">{i + 1}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {POSITIONS.map((pos) => (
-                          <tr key={pos}>
-                            <td className="pos-cell">{pos}</td>
-                            {lineup.innings.map((inning, i) => (
-                              <td key={i}>{getPlayerName(inning[pos])}</td>
-                            ))}
-                          </tr>
-                        ))}
-                        {hasBench && (
-                          <tr className="bench-table-row">
-                            <td className="pos-cell bench-cell">BN</td>
-                            {lineup.bench.map((benchList, i) => (
-                              <td key={i} className="bench-cell">
-                                {benchList.map((pid) => getPlayerName(pid)).join(', ') || '—'}
-                              </td>
-                            ))}
-                          </tr>
-                        )}
+                        {lineup.battingOrder.map((pid, idx) => {
+                          const positions = playerInningMap[pid] || [];
+                          return (
+                            <tr key={pid}>
+                              <td className="cell-order">{idx + 1}</td>
+                              <td className="cell-name">{getPlayerName(pid)}</td>
+                              {positions.map((pos, i) => (
+                                <td key={i} className={`cell-pos ${pos === 'BN' ? 'cell-bench' : ''}`}>
+                                  {pos || '—'}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -134,25 +148,25 @@ export default function History({ players, lineups, deleteLineup }) {
 }
 
 function buildPrintHTML(lineup, getPlayerName) {
-  const hasBench = lineup.bench && lineup.bench.some((b) => b.length > 0);
+  const playerInningMap = buildPlayerInningMap(lineup);
 
-  const battingRows = lineup.battingOrder
-    .map((pid, i) => `<tr><td>${i + 1}</td><td>${getPlayerName(pid)}</td></tr>`)
-    .join('');
-
-  const posHeaders = Array.from({ length: INNINGS_PER_GAME }, (_, i) => `<th>Inn ${i + 1}</th>`).join('');
-  const posRows = POSITIONS.map(
-    (pos) =>
-      `<tr><td><strong>${pos}</strong></td>${lineup.innings
-        .map((inn) => `<td>${getPlayerName(inn[pos])}</td>`)
-        .join('')}</tr>`
+  const inningHeaders = Array.from(
+    { length: INNINGS_PER_GAME },
+    (_, i) => `<th>Inn ${i + 1}</th>`
   ).join('');
 
-  const benchRow = hasBench
-    ? `<tr style="background:#fff3e0"><td><strong>BN</strong></td>${lineup.bench
-        .map((bl) => `<td>${bl.map((pid) => getPlayerName(pid)).join(', ') || '—'}</td>`)
-        .join('')}</tr>`
-    : '';
+  const playerRows = lineup.battingOrder
+    .map((pid, idx) => {
+      const positions = playerInningMap[pid] || [];
+      const cells = positions
+        .map((pos) => {
+          const cls = pos === 'BN' ? ' class="bench-cell"' : '';
+          return `<td${cls}>${pos || '—'}</td>`;
+        })
+        .join('');
+      return `<tr><td><strong>${idx + 1}</strong></td><td>${getPlayerName(pid)}</td>${cells}</tr>`;
+    })
+    .join('');
 
   return `<!DOCTYPE html>
 <html>
@@ -161,15 +175,17 @@ function buildPrintHTML(lineup, getPlayerName) {
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
     h1 { font-size: 22px; margin-bottom: 4px; }
-    h2 { font-size: 16px; margin-top: 20px; margin-bottom: 8px; }
     .date { color: #666; font-size: 14px; margin-bottom: 16px; }
     table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
-    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; font-size: 13px; }
-    th { background: #f5f5f5; }
-    ol { padding-left: 24px; }
-    li { margin-bottom: 2px; font-size: 14px; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; font-size: 13px; }
+    th { background: #2e7d32; color: white; }
+    td:first-child { text-align: center; font-weight: bold; width: 30px; }
+    td:nth-child(2) { text-align: left; font-weight: 500; white-space: nowrap; }
+    .bench-cell { background: #fff8ee; font-style: italic; color: #999; }
     @media print {
       body { padding: 0; }
+      th { background: #333 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .bench-cell { background: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
@@ -177,16 +193,9 @@ function buildPrintHTML(lineup, getPlayerName) {
   <h1>Game #${lineup.gameNumber} Lineup</h1>
   <div class="date">${new Date(lineup.date).toLocaleDateString()}</div>
 
-  <h2>Batting Order (${lineup.battingOrder.length} players)</h2>
   <table>
-    <thead><tr><th>#</th><th>Player</th></tr></thead>
-    <tbody>${battingRows}</tbody>
-  </table>
-
-  <h2>Field Positions</h2>
-  <table>
-    <thead><tr><th>Pos</th>${posHeaders}</tr></thead>
-    <tbody>${posRows}${benchRow}</tbody>
+    <thead><tr><th>#</th><th style="text-align:left">Player</th>${inningHeaders}</tr></thead>
+    <tbody>${playerRows}</tbody>
   </table>
 </body>
 </html>`;
